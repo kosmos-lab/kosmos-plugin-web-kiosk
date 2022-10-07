@@ -1,0 +1,33 @@
+{
+   "image":[
+      {
+         "src":"https://example.com/testimage.png",
+         "name":"testimage"
+      }
+   ],
+   "drawing":[
+      {
+         "src":"https://example.com/testdrawing.png",
+         "name":"test drawing"
+      }
+   ],
+   "video":[
+      {
+         "src":"https://example.com/testvideo.mp4",
+         "name":"test video"
+      }
+   ],
+   "page":[
+      {
+         "src":"https://github.com/kosmos-lab",
+         "name":"github kosmos-lab"
+      },
+      {
+         "src":"https://www.example.com",
+         "name":"example.com"
+      }
+   ],
+   "remote":[
+      "https://www.example.com/remoteinclude"
+   ]
+}

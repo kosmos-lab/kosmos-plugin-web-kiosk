@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="google" value="notranslate">
+    <title>KosmoS Kiosk Admin</title>
+    <link rel="stylesheet" href="../css/bootstrap.min.css" crossorigin="anonymous">
+    <script src="../js/jquery-3.5.1.slim.min.js" crossorigin="anonymous"></script>
+    <script src="../js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+    <script src="../js/kosmos.js"></script>
+    <link rel="stylesheet" href="../css/kosmos.css">
+    <style>
+        .dyn-btn > .btn {
+            margin: 0.20rem;
+        }
+        body {
+            overflow:auto!important;
+
+        }
+    </style>
+
+    <script>
+        function sortByKey(array, key) {
+            return array.sort(function (a, b) {
+                const x = a[key];
+                const y = b[key];
+                return ((x < y) ? -1 : ((x > y) ? 1 : 0));
+            });
+        }
+
+        function connect(kosmos) {
+            //set base to localhost
+            let _base = 'ws://localhost:18080';
+            //if possible get location from window
+            if (typeof window !== 'undefined' && typeof window.location !== 'undefined') {
+                _base = `${window.location.protocol=="https:"?("wss"):("ws")}://${window.location.hostname}:${window.location.port}`;
+            }
+            const ws = new WebSocket(`${_base}/kioskws`);
+            ws.onopen = function () {
+                // send auth on open
+                ws.send(JSON.stringify({
+                    "type": "auth",
+                    "username": kosmos._username,
+                    "password": kosmos._password
+
+                }));
+            };
+            // called if a message is received
+            ws.onmessage = function (e) {
+                console.log('Message:', e.data);
+                const json = JSON.parse(e.data);
+                if (json.type) {
+
+                    if (json.type == "targetList") {
+
+                        kosmos.parseTargets(json.value)
+                    } else if (json.type == "objectList") {
+                        kosmos.parseObjects(json.value)
+                    }
+                }
+            };
+            // onclose will be called if connection was closed
+            ws.onclose = function (e) {
+                console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
+                //try to reconnect
+                setTimeout(function () {
+                    connect();
+                }, 1000);
+            };
+            // onerror is called on error
+            ws.onerror = function (err) {
+                console.error('Socket encountered error: ', err.message, 'Closing socket');
+                ws.close();
+            };
+        }
+
+        // extend the generic Kosmos class for this use case
+        class myKosmos extends Kosmos {
+            _selected = [];
+            // this will be used to parseObjects, it creates the needed buttons
+            parseObjects = function (data) {
+
+                // we need a link to this
+                let me = this;
+                let div = document.getElementById("images");
+                //delete all old images
+                while (div.firstChild) {
+                    div.removeChild(div.lastChild);
+                }
+                //iterate all images
+                sortByKey(data.image, "name").forEach(function (target) {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.classList.add("btn");
+                    button.classList.add("btn-primary");
+                    button.innerText = target.name;
+                    target.type = "image";
+                    button.addEventListener('click', function () {
+                        me.sendMessageToTarget({"type": "show-image", "value": target.src});
+                    });
+                    div.appendChild(button);
+                });
+                div = document.getElementById("videos");
+                //delete all old videos
+                while (div.firstChild) {
+                    div.removeChild(div.lastChild);
+                }
+
+                //iterate over all videos
+                sortByKey(data.video, "name").forEach(function (target) {
+
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.classList.add("btn");
+                    button.classList.add("btn-secondary");
+                    button.innerText = target.name;
+                    target.type = "video";
+                    button.addEventListener('click', function () {
+                        me.sendMessageToTarget({"type": "show-video", "value": target.src});
+                    });
+                    div.appendChild(button);
+                });
+                div = document.getElementById("websites");
+                //remove all old websites
+                while (div.firstChild) {
+                    div.removeChild(div.lastChild);
+                }
+                //iterate over all pages
+                sortByKey(data.page, "name").forEach(function (target) {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.classList.add("btn");
+                    button.classList.add("btn-info");
+                    button.innerText = target.name;
+                    target.type = "page";
+                    button.addEventListener('click', function () {
+                        me.sendMessageToTarget({"type": "show-page", "value": target.src});
+                    });
+                    div.appendChild(button);
+                });
+                div = document.getElementById("drawings");
+                //delete all old images
+                while (div.firstChild) {
+                    div.removeChild(div.lastChild);
+                }
+                //iterate all images
+                sortByKey(data.drawing, "name").forEach(function (target) {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.classList.add("btn");
+                    button.classList.add("btn-primary");
+                    button.innerText = target.name;
+                    target.type = "image";
+                    button.addEventListener('click', function () {
+                        me.sendMessageToTarget({"type": "show-image", "value": target.src});
+                    });
+                    div.appendChild(button);
+                });
+                this.recheckTargets();
+
+            }
+
+            parseTargets = function (data) {
+                const div = document.getElementById("target-select");
+                const oldvalue = document.getElementById("target-select").value;
+                while (div.firstChild) {
+                    div.removeChild(div.lastChild);
+                }
+                if (data.length > 0) {
+                    data.forEach(function (target) {
+                        const form = document.createElement("div");
+                        form.classList.add("form-check");
+                        const input = document.createElement("input");
+                        input.type = "checkbox"
+                        input.value = target;
+                        input.onclick = kosmos.recheckTargets;
+
+                        if (kosmos._selected != undefined) {
+                            if (kosmos._selected.includes(target)) {
+                                input.checked = "true";
+                            }
+                        }
+                        input.id = `check_${target}`;
+                        input.classList.add("form-check-input");
+                        form.appendChild(input);
+                        if (input.value == oldvalue) {
+                            console.log(`reselecting ${input.value}`)
+                            input.selected = 1;
+                        }
+                        const label = document.createElement("label")
+                        label.setAttribute("for", `check_${target}`);
+                        label.innerText = target;
+                        label.classList.add("form-check-label");
+                        form.appendChild(label);
+                        div.appendChild(form);
+
+                    });
+                    div.classList.remove("is-invalid")
+                    div.classList.add("is-valid")
+                } else {
+                    const option = document.createElement("option");
+                    option.value = "";
+                    option.innerText = "nothing connected";
+                    div.appendChild(option);
+                    div.classList.remove("is-valid")
+                    div.classList.add("is-invalid")
+
+                }
+
+
+                this.recheckTargets();
+
+            }
+            getSelectedTargets = function () {
+                const inputs = document.getElementById("target-select").getElementsByTagName("input");
+                const list = [];
+                for (let i = 0; i < inputs.length; i++) {
+                    const input = inputs[i];
+
+                    if (input.checked) {
+                        list.push(input.value);
+
+                    }
+                }
+                kosmos._selected = list;
+                return list;
+            }
+            //used to activate/deactivate the btns based on the availability of targets
+            recheckTargets = function () {
+                //checks if a valid target was selected
+                if (kosmos.getSelectedTargets().length == "0") {
+                    const btns = document.getElementsByClassName("btn");
+                    for (let i = 0; i < btns.length; i++) {
+                        const btn = btns[i];
+                        if (!btn.classList.contains("donthide")) {
+                            btn.disabled = true;
+                        }
+
+                    }
+                    console.log(`disabled all ${btns.length} btns`);
+                } else {
+                    const btns = document.getElementsByClassName("btn");
+                    for (let i = 0; i < btns.length; i++) {
+                        //console.log();
+                        const btn = btns[i];
+                        btn.disabled = false;
+                    }
+                    console.log(`enabled all ${btns.length} btns`);
+                }
+            }
+
+            sendMessageToTarget = function (message) {
+
+
+                const inputs = document.getElementById("target-select").getElementsByTagName("input");
+
+                for (let i = 0; i < inputs.length; i++) {
+                    const input = inputs[i];
+                    console.log(inputs[i]);
+                    if (input.checked) {
+                        message.target = inputs[i].value;
+                        this.fetchData('/kiosk/sendMessage',
+                            message, 'POST'
+                        )
+                    }
+                }
+
+            }
+            reloadConfig = function () {
+
+
+                this.fetchData('/kiosk/reloadConfig',
+                    {}, 'POST'
+                )
+
+
+            }
+
+            onLogin = function () {
+                connect(this);
+            }
+        }
+
+        kosmos = new myKosmos();
+        sendCustomImage = function () {
+            kosmos.sendMessageToTarget({
+                "type": "show-image",
+                "value": document.getElementById("customImage").value
+
+            });
+
+        }
+        sendCustomVideo = function () {
+            kosmos.sendMessageToTarget({
+                "type": "show-video",
+                "value": document.getElementById("customVideo").value
+            });
+        }
+
+        sendCustomPage = function () {
+            kosmos.sendMessageToTarget({
+                "type": "show-page",
+                "value": document.getElementById("customPage").value
+            });
+
+        }
+    </script>
+</head>
+<body>
+<div class="container" id="kosmos_login">
+    <div class="card align-middle align-content-center">
+        <div class="card-body">
+            <div id="login_error"></div>
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="label-username">Username</span>
+                </div>
+                <input type="text" class="form-control" id="username" name="username" placeholder="Username"
+                       aria-label="Username"
+                       aria-describedby="label-username">
+            </div>
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="label-password">Password</span>
+                </div>
+                <input type="password" class="form-control" id="password" name="password" placeholder="Password"
+                       aria-label="Password"
+
+                       aria-describedby="label-password">
+            </div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" name="save" id="save" checked>
+                <label class="form-check-label" for="save">remember</label>
+
+            </div>
+        </div>
+        <div class="card-footer">
+            <button type="submit" class="btn btn-outline-primary" id="btn_login">login</button>
+
+        </div>
+        <div id="logindiv" class="card-footer">
+
+        </div>
+    </div>
+
+</div>
+<div class="container" id="kosmos_main" style="display: none">
+
+    <!--<div class="input-group mb-3">
+        <span class="input-group-text" id="inputGroup-sizing-default">Target</span>
+        <div id="target-select">
+
+        </div>
+
+    </div>-->
+
+    <p>
+    <div id="objects" class="d-flex flex-row flex-wrap">
+        <div class="card col-lg-1 flex-fill">
+            <div class="card-header">Target</div>
+            <div class="card-body" id="target-select">
+
+            </div>
+
+        </div>
+        <div class="card col-lg-4  flex-fill">
+            <div class="card-header">
+                images
+            </div>
+            <div class="card-body">
+                <div id="images" class="dyn-btn">
+                </div>
+            </div>
+            <div class="card-footer text-muted">
+                <form class="row g-3">
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" id="customImage" placeholder="custom image"
+                               aria-label="custom image" aria-describedby="setCustomImage">
+                        <button class="btn btn-outline-secondary" type="button" onclick="sendCustomImage()"
+                                id="setCustomImage">set
+                        </button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+        <div class="card  col-lg-3  flex-fill">
+            <div class="card-header">
+                videos
+            </div>
+            <div class="card-body">
+                <div id="videos" class="dyn-btn">
+                </div>
+            </div>
+            <div class="card-footer ">
+
+                <form class="row g-3">
+
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" id="customVideo" placeholder="custom video"
+                               aria-label="custom video" aria-describedby="setCustomVideo">
+                        <button class="btn btn-outline-secondary" type="button" onclick="sendCustomVideo()"
+                                id="setCustomVideo">set
+                        </button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+        <div class="card  col-lg-2  flex-fill">
+            <div class="card-header">
+                websites
+            </div>
+            <div class="card-body">
+                <div id="websites" class="dyn-btn">
+                </div>
+            </div>
+            <div class="card-footer ">
+
+                <form class="row g-3">
+
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" id="customPage" placeholder="custom page"
+                               aria-label="custom page" aria-describedby="setCustomPage">
+                        <button class="btn btn-outline-secondary" type="button" onclick="sendCustomPage()"
+                                id="setCustomPage">set
+                        </button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+        <div class="card  col-lg-2  flex-fill">
+            <div class="card-header">
+                control
+            </div>
+            <div class="card-body">
+                <div id="control" class="dyn-btn">
+                    <button type="button" onclick="kosmos.sendMessageToTarget({'type': 'video-play'})"
+                            class="btn btn-warning">video-play
+                    </button>
+                    <button type="button" onclick="kosmos.sendMessageToTarget({'type': 'video-pause'})"
+                            class="btn btn-warning">video-pause
+                    </button>
+                    <button type="button" onclick="kosmos.sendMessageToTarget({'type': 'video-seek','value':-10})"
+                            class="btn btn-warning">video-10s
+                    </button>
+                    <button type="button" onclick="kosmos.sendMessageToTarget({'type': 'video-seek','value':+10})"
+                            class="btn btn-warning">video+10s
+                    </button>
+                    <button type="button" onclick="kosmos.sendMessageToTarget({'type': 'reload'})"
+                            class="btn btn-warning">reload
+                    </button>
+                    <button type="button" onclick="kosmos.reloadConfig()"
+                            class="btn donthide btn-warning">reload config
+                    </button>
+                </div>
+            </div>
+        </div>
+    <div class="card col-lg-4  flex-fill">
+        <div class="card-header">
+            drawings
+        </div>
+        <div class="card-body">
+            <div id="drawings" class="dyn-btn">
+            </div>
+        </div>
+
+    </div>
+    </div>
+    </p>
+</div>
+</body>
+</html>
